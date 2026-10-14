@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Bảng Cân Lúa Mobile</title>
+<!-- Thư viện chụp ảnh phiếu cân -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  :root {
+    --primary: #059669; 
+    --primary-dark: #047857;
+    --secondary: #3b82f6;
+    --danger: #dc2626;
+    --warning: #f59e0b;
+    --bg-color: #f3f4f6;
+    --surface: #ffffff;
+    --text-main: #111827;
+    --text-muted: #6b7280;
+    --border: #e5e7eb;
+  }
+
+  * { box-sizing: border-box; font-family: 'Inter', -apple-system, BlinkMacSystemFont, Arial, sans-serif; }
+  body { background: var(--bg-color); margin: 0; padding: 0; color: var(--text-main); padding-bottom: 20px; }
+
+  /* Header Compact */
+  .header {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--primary-dark);
+    color: white;
+    padding: 12px 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  
+  .header-left { display: flex; flex-direction: column; }
+  .header-title { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: 0.5px; }
+  .header-live-stats { font-size: 13px; font-weight: 600; color: #a7f3d0; margin-top: 2px; }
+
+  .header-actions { display: flex; align-items: center; gap: 12px; }
+  .save-status { font-size: 11px; opacity: 0.9; font-weight: 500; }
+
+  /* Toast Notification */
+  .toast {
+    position: fixed; top: 60px; left: 50%; transform: translateX(-50%) translateY(-10px);
+    background: rgba(17, 24, 39, 0.95); color: #ffffff;
+    padding: 12px 20px; border-radius: 20px; font-size: 15px; font-weight: 600;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3); z-index: 1000;
+    opacity: 0; visibility: hidden; transition: all 0.3s ease; pointer-events: none; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0); }
+
+  /* Info Bar */
+  .info-bar {
+    background: var(--surface); padding: 12px; margin: 10px 12px;
+    border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .info-grid input, .info-grid select {
+    padding: 10px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 15px; width: 100%; color: var(--text-main); background: #fafafa; transition: all 0.2s;
+  }
+  .info-grid input:focus, .info-grid select:focus {
+    border-color: var(--primary); outline: none; background: #fff; box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.1);
+  }
+  #tienCoc { grid-column: span 2; } /* Tiền cọc trải dài 2 ô */
+
+  /* Buttons Menu */
+  .btn-group { display: flex; gap: 8px; padding: 0 12px 12px; overflow-x: auto; scrollbar-width: none; }
+  .btn-group::-webkit-scrollbar { display: none; }
+  .btn {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 10px 16px; border: none; border-radius: 8px; cursor: pointer;
+    font-size: 14px; white-space: nowrap; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-secondary { background: var(--surface); color: var(--secondary); border: 1px solid var(--secondary); }
+  .btn-danger { background: var(--danger); color: white; padding: 6px 12px; font-size: 13px; }
+  .btn-warning { background: var(--warning); color: white; border: none; }
+  .btn-outline { background: var(--surface); color: var(--text-main); border: 1px solid var(--border); }
+
+  /* Boards */
+  .board {
+    background: var(--surface); margin: 0 12px 16px; border-radius: 12px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.06); overflow: hidden; border: 1px solid #e5e7eb;
+  }
+  .board-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 14px; background: #ecfdf5; border-bottom: 2px solid #d1fae5;
+  }
+  .board-title { font-weight: 800; font-size: 16px; color: var(--primary-dark); }
+  
+  .table-wrapper { padding: 10px; overflow-x: auto; }
+  table { width: 100%; border-collapse: separate; border-spacing: 4px; }
+  th, td { border: none; padding: 0; text-align: center; }
+
+  /* Cells */
+  input.cell {
+    width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 2px;
+    text-align: center; font-size: 28px; font-family: 'Impact', sans-serif; font-weight: normal;
+    letter-spacing: 1px; color: #111827; background: #f8fafc; outline: none; transition: all 0.2s ease;
+  }
+  input.cell:focus {
+    background: #ffffff; border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.2); transform: scale(1.05); z-index: 2; position: relative;
+  }
+  input.cell.cell-warning { background-color: #fee2e2 !important; color: #dc2626 !important; border-color: #fca5a5 !important; }
+
+  /* Total Columns */
+  .total-row td { 
+    background: #fef08a; color: #92400e; border-radius: 8px; padding: 10px 2px; 
+    font-size: 26px; font-family: 'Impact', sans-serif; font-weight: normal; letter-spacing: 1px;
+    border: 1px solid #fde047; box-shadow: inset 0 2px 4px rgba(0,0,0,0.03);
+  }
+
+  /* Board Total Center - Nổi bật */
+  .board-total-center {
+    text-align: center;
+    font-size: 36px;
+    font-family: 'Impact', sans-serif;
+    color: var(--danger);
+    padding: 14px;
+    background: #fff5f5;
+    border-top: 2px dashed #fecaca;
+    letter-spacing: 1px;
+  }
+
+  /* Summary Card (Bảng Tổng Kết) To & Rõ Hơn */
+  .summary-card {
+    background: var(--surface); margin: 0 12px 20px; border-radius: 12px;
+    padding: 20px; box-shadow: 0 5px 20px rgba(0,0,0,0.08); border: 2px solid var(--primary);
+  }
+  .summary-title { font-size: 20px; font-weight: 900; color: var(--primary-dark); margin-bottom: 16px; text-align: center; text-transform: uppercase; }
+  .summary-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 16px; color: var(--text-main); }
+  .summary-row.bold { font-weight: 700; font-size: 17px; }
+  .summary-row.highlight { color: var(--secondary); font-weight: 800; font-size: 17px; }
+  .summary-row.final { font-weight: 900; font-size: 26px; color: var(--danger); border-top: 2px dashed #ccc; padding-top: 16px; margin-top: 8px; }
+
+  /* History Modal */
+  .modal-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5);
+    z-index: 1000; display: none; justify-content: center; align-items: flex-end;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal-content {
+    background: white; width: 100%; max-height: 85vh; border-radius: 20px 20px 0 0;
+    padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;
+  }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; font-size: 18px; font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 12px; }
+  .history-item { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; display: flex; justify-content: space-between; align-items: center; background: #f9fafb; }
+  .history-info { display: flex; flex-direction: column; gap: 4px; }
+  .history-title { font-weight: bold; font-size: 16px; color: var(--primary-dark); }
+  .history-detail { font-size: 14px; color: var(--text-muted); }
+  .history-actions { display: flex; gap: 8px; }
+
+  /* Print Settings - Mỗi trang 1 bảng */
+  @media print {
+    body { background: white; padding-bottom: 0; }
+    .header, .btn-group, .toast, .modal-overlay, .info-bar { display: none!important; }
+    .board { box-shadow: none; margin: 0; border: 1px solid #000; page-break-after: always; break-after: page; }
+    .summary-card { page-break-inside: avoid; border: 2px solid #000; box-shadow: none; margin-top: 20px; }
+    input.cell { border: 1px solid #ccc; font-size: 24px; }
+    .total-row td { font-size: 24px; border: 1px solid #ccc; background: transparent; color: black; }
+    .board-total-center { font-size: 30px; background: transparent; border-top: 1px solid #000; color: black; }
+    @page { size: A4 portrait; margin: 15mm; }
+  }
+</style>
+</head>
+<body>
+
+<div id="toast" class="toast">Thông báo</div>
+
+<div class="header">
+  <div class="header-left">
+    <h2 class="header-title">⚖️ Cân Lúa</h2>
+    <!-- Khu vực hiển thị Bao và Kg trực tiếp trên Header -->
+    <div class="header-live-stats" id="headerLiveStats">0 bao | 0.0 kg</div>
+  </div>
+  
+  <div class="header-actions">
+    <span class="save-status" id="saveStatus">Đã lưu</span>
+    <button class="btn btn-danger" onclick="xoaTatCa()">Làm mới</button>
+  </div>
+</div>
+
+<div class="btn-group" style="padding-top: 12px; padding-bottom: 4px;">
+  <button class="btn btn-primary" onclick="themBang()">➕ Thêm bảng</button>
+  <button class="btn btn-warning" onclick="luuPhieuMoi()">💾 Lưu Phiếu</button>
+  <button class="btn btn-secondary" onclick="chupPhieu()">📸 Chụp Ảnh</button>
+  <button class="btn btn-outline" onclick="moLichSu()">🕒 Lịch sử</button>
+  <button class="btn btn-outline" onclick="inPhieu()">🖨️ In Hóa Đơn</button>
+</div>
+
+<!-- Khu vực bao bọc để chụp ảnh phiếu -->
+<div id="capture-area" style="background: var(--bg-color); padding-bottom: 10px;">
+  <div class="info-bar">
+    <div class="info-grid">
+      <input type="text" id="tenChung" placeholder="Tên chủ ruộng" oninput="updateChung()">
+      <input type="text" id="ngayChung" placeholder="Ngày cân" oninput="updateChung()">
+      <select id="loaiChung" onchange="updateChung()">
+        <option>OM18</option>
+        <option>Đài Thơm 8</option>
+        <option>OM5451</option>
+        <option>IR50404</option>
+        <option>ST24</option>
+        <option>ST25</option>
+        <option>Lộc Trời 28</option>
+        <option>Khác</option>
+      </select>
+      <input type="text" inputmode="numeric" id="giaChung" placeholder="Đơn giá (đ/kg)" oninput="formatCurrency(this)">
+      <input type="number" id="trongLuongBi" placeholder="Trừ bì: kg/bao (VD: 0.2)" oninput="updateChung()" step="0.1">
+      <input type="number" id="trongLuongBiBao" placeholder="Trừ bì: bao/kg (VD: 8)" oninput="updateChung()" step="0.1">
+      <input type="text" inputmode="numeric" id="tienCoc" placeholder="Tiền cọc (VNĐ)" oninput="formatCurrency(this)">
+    </div>
+  </div>
+
+  <div id="boards"></div>
+
+  <!-- Bảng Tổng Kết -->
+  <div class="summary-card" id="summaryCard">
+    <div class="summary-title">HÓA ĐƠN TỔNG KẾT</div>
+    <div class="summary-row"><span>Chủ ruộng:</span> <span id="sumName" class="bold">-</span></div>
+    <div class="summary-row"><span>Ngày cân:</span> <span id="sumDate" class="bold">-</span></div>
+    <hr style="border: 0; border-top: 1px dashed #ccc; margin: 12px 0;">
+    <div class="summary-row"><span>Tổng số bao:</span> <span id="sumBao" class="bold">0 bao</span></div>
+    <div class="summary-row"><span>Tổng trọng lượng (Cả bì):</span> <span id="sumGross" class="bold">0.0 kg</span></div>
+    <div class="summary-row"><span>Tổng trừ bì:</span> <span id="sumTare">0.0 kg</span></div>
+    <div class="summary-row highlight"><span>Trọng lượng thực tính (Net):</span> <span id="sumNet">0.0 kg</span></div>
+    <div class="summary-row"><span>Thành tiền:</span> <span id="sumMoney" class="bold">0 đ</span></div>
+    <div class="summary-row"><span>Đã cọc:</span> <span id="sumDeposit">0 đ</span></div>
+    <div class="summary-row final"><span>THỰC TRẢ:</span> <span id="sumFinal">0 đ</span></div>
+  </div>
+</div>
+
+<!-- Modal Lịch sử -->
+<div class="modal-overlay" id="historyModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      Lịch sử Phiếu Cân
+      <button class="btn btn-outline" style="border:none; padding:6px 10px;" onclick="dongLichSu()">❌</button>
+    </div>
+    
+    <div style="display:flex; gap:8px; margin-bottom: 10px;">
+      <button class="btn btn-warning" style="flex:1;" onclick="saoLuuFile()">📥 Xuất Sao Lưu</button>
+      <button class="btn btn-outline" style="flex:1;" onclick="khoiPhucFile()">📤 Phục Hồi</button>
+    </div>
+    
+    <div id="historyList" style="display:flex; flex-direction:column; gap:10px;">
+      <!-- Danh sách render bằng JS -->
+    </div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept=".json" style="display:none" onchange="docFile(this)">
+
+<script>
+const KEY_CURRENT = "bangCanDataCol_v14_current";
+const KEY_CHUNG = "bangCanDataCol_v14_chung";
+const KEY_HISTORY = "bangCanDataCol_v14_history";
+
+let boards = JSON.parse(localStorage.getItem(KEY_CURRENT)) || [createBoard()];
+let chung = JSON.parse(localStorage.getItem(KEY_CHUNG)) || {
+  ten: "", ngay: new Date().toLocaleDateString('vi-VN'), loaiLua: "OM18", donGia: "", trongLuongBi: "", trongLuongBiBao: "", tienCoc: ""
+};
+let historyList = JSON.parse(localStorage.getItem(KEY_HISTORY)) || [];
+let saveTimer = null;
+let toastTimer = null;
+
+// Khởi tạo giá trị
+document.getElementById("tenChung").value = chung.ten || "";
+document.getElementById("ngayChung").value = chung.ngay || new Date().toLocaleDateString('vi-VN');
+document.getElementById("loaiChung").value = chung.loaiLua || "OM18";
+document.getElementById("giaChung").value = formatNumberStr(chung.donGia);
+document.getElementById("trongLuongBi").value = chung.trongLuongBi || "";
+document.getElementById("trongLuongBiBao").value = chung.trongLuongBiBao || "";
+document.getElementById("tienCoc").value = formatNumberStr(chung.tienCoc);
+
+function createBoard() {
+  return { id: Date.now() + Math.random(), cells: Array(25).fill("") };
+}
+
+function showToast(msg) {
+  const toast = document.getElementById("toast");
+  toast.textContent = msg;
+  toast.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.classList.remove("show"); }, 2500);
+}
+
+function formatNumberStr(val) {
+  if (!val) return "";
+  return parseInt(val).toLocaleString('en-US');
+}
+
+function formatCurrency(el) {
+  let val = el.value.replace(/\D/g, "");
+  el.value = val ? parseInt(val).toLocaleString('en-US') : "";
+  updateChung();
+}
+
+function getCleanNumber(val) {
+  if (!val) return 0;
+  return parseFloat(val.toString().replace(/\D/g, "")) || 0;
+}
+
+function checkWarning(raw) {
+  if (!raw) return false;
+  let val = parseInt(raw) || 0;
+  let kg = val / 10;
+  let lastDigit = parseInt(raw.slice(-1)) || 0;
+  let isOutOfRange = (kg > 0 && (kg < 30 || kg > 70));
+  let isOddDecimal = (lastDigit % 2 !== 0);
+  return isOutOfRange || isOddDecimal;
+}
+
+function save() {
+  try {
+    localStorage.setItem(KEY_CURRENT, JSON.stringify(boards));
+    localStorage.setItem(KEY_CHUNG, JSON.stringify(chung));
+    localStorage.setItem(KEY_HISTORY, JSON.stringify(historyList));
+    document.getElementById("saveStatus").textContent = "Đã lưu " + new Date().toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'});
+  } catch(e) {
+    alert("Lỗi lưu dữ liệu. Bộ nhớ máy có thể đã đầy!");
+  }
+}
+
+function autoSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(save, 300);
+  document.getElementById("saveStatus").textContent = "Đang lưu...";
+}
+
+function toKg(raw) {
+  let n = parseInt(raw) || 0;
+  return n / 10;
+}
+
+function formatKg(n) {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+function formatTien(n) {
+  return n.toLocaleString('vi-VN') + " đ";
+}
+
+function updateChung() {
+  chung.ten = document.getElementById("tenChung").value;
+  chung.ngay = document.getElementById("ngayChung").value;
+  chung.loaiLua = document.getElementById("loaiChung").value;
+  chung.donGia = getCleanNumber(document.getElementById("giaChung").value);
+  chung.trongLuongBi = parseFloat(document.getElementById("trongLuongBi").value) || 0;
+  chung.trongLuongBiBao = parseFloat(document.getElementById("trongLuongBiBao").value) || 0;
+  chung.tienCoc = getCleanNumber(document.getElementById("tienCoc").value);
+  autoSave();
+  updateTotals();
+}
+
+function render() {
+  const container = document.getElementById("boards");
+  container.innerHTML = "";
+
+  boards.forEach((board, bIndex) => {
+    let html = `
+      <div class="board">
+        <div class="board-header">
+          <div class="board-title" id="board-title-text-${bIndex}">BẢNG SỐ ${bIndex + 1}</div>
+          <button class="btn btn-danger" style="padding: 4px 10px; font-size:12px;" onclick="deleteBoard(${bIndex})">Xóa</button>
+        </div>
+        <div class="table-wrapper">
+        <table>
+          <tbody>
+    `;
+
+    for (let row = 0; row < 5; row++) {
+      html += "<tr>";
+      for (let col = 0; col < 5; col++) {
+        let idx = row * 5 + col;
+        let raw = board.cells[idx] || "";
+        
+        let displayVal = raw.length > 1 ? raw.slice(0, -1) + "." + raw.slice(-1) : raw;
+        let warningClass = checkWarning(raw) ? " cell-warning" : "";
+
+        html += `<td><input type="text" class="cell${warningClass}"
+                  inputmode="numeric" pattern="[0-9]*"
+                  id="cell-${bIndex}-${idx}" value="${displayVal}"
+                  data-board="${bIndex}" data-idx="${idx}" data-col="${col}" data-row="${row}"
+                  oninput="handleInput(this)" onkeydown="handleKey(event, this)" placeholder=""></td>`;
+      }
+      html += "</tr>";
+    }
+
+    html += `<tr class="total-row">
+      <td id="col-0-${bIndex}">0.0</td><td id="col-1-${bIndex}">0.0</td>
+      <td id="col-2-${bIndex}">0.0</td><td id="col-3-${bIndex}">0.0</td>
+      <td id="col-4-${bIndex}">0.0</td>
+    </tr></tbody></table></div>
+      <!-- Dòng cộng bảng nổi bật nằm giữa -->
+      <div class="board-total-center" id="board-total-center-${bIndex}">0.0</div>
+    </div>`;
+
+    container.innerHTML += html;
+  });
+
+  updateTotals();
+}
+
+function updateTotals() {
+  let grandKg = 0;
+  let totalBags = 0;
+
+  // Tính tổng kg và số bao từng bảng
+  boards.forEach((board, bIndex) => {
+    let boardKg = 0;
+    let colTotals = [0, 0, 0, 0, 0];
+
+    for (let i = 0; i < 25; i++) {
+      if (board.cells[i] !== "") totalBags++;
+      let val = toKg(board.cells[i]);
+      colTotals[i % 5] += val;
+      boardKg += val;
+    }
+    grandKg += boardKg;
+
+    for (let c = 0; c < 5; c++) {
+      document.getElementById(`col-${c}-${bIndex}`).innerText = formatKg(colTotals[c]);
+    }
+    // Gắn số tổng vào giữa bảng và lên Tiêu đề Bảng
+    document.getElementById(`board-total-center-${bIndex}`).innerText = formatKg(boardKg);
+    document.getElementById(`board-title-text-${bIndex}`).innerText = `BẢNG SỐ ${bIndex + 1} - ${formatKg(boardKg)} kg`;
+  });
+
+  // --- CẬP NHẬT HEADER LIVE STATS ---
+  document.getElementById("headerLiveStats").innerText = `${totalBags} bao | ${formatKg(grandKg)} kg`;
+
+  // --- Tính Toán Tài Chính & Trừ Bì ---
+  let donGia = parseFloat(chung.donGia) || 0;
+  let tienCoc = parseFloat(chung.tienCoc) || 0;
+  
+  // Tính trừ bì kết hợp cả 2 loại nếu người dùng nhập
+  let tareWeightPerBag = parseFloat(chung.trongLuongBi) || 0; // VD: 0.2 kg/bao
+  let baoPerKg = parseFloat(chung.trongLuongBiBao) || 0;      // VD: 8 bao/kg
+  
+  let tare1 = totalBags * tareWeightPerBag;
+  let tare2 = baoPerKg > 0 ? (totalBags / baoPerKg) : 0;
+  let totalTare = tare1 + tare2;
+  
+  let netKg = grandKg - totalTare;
+  if(netKg < 0) netKg = 0;
+
+  let totalMoney = netKg * donGia;
+  let finalPay = totalMoney - tienCoc;
+
+  // Cập nhật Bảng Tổng Kết (Summary Card)
+  document.getElementById("sumName").innerText = chung.ten || ".......................................................";
+  document.getElementById("sumDate").innerText = chung.ngay || ".......................................................";
+  document.getElementById("sumBao").innerText = totalBags + " bao";
+  document.getElementById("sumGross").innerText = formatKg(grandKg) + " kg";
+  document.getElementById("sumTare").innerText = formatKg(totalTare) + " kg";
+  document.getElementById("sumNet").innerText = formatKg(netKg) + " kg";
+  document.getElementById("sumMoney").innerText = formatTien(totalMoney);
+  document.getElementById("sumDeposit").innerText = formatTien(tienCoc);
+  document.getElementById("sumFinal").innerText = formatTien(finalPay);
+}
+
+function handleInput(el) {
+  let val = el.value.replace(/[^0-9]/g, "");
+  if (val.length > 3) val = val.slice(0, 3);
+  
+  let bIndex = parseInt(el.dataset.board);
+  let idx = parseInt(el.dataset.idx);
+  let col = parseInt(el.dataset.col);
+  let row = parseInt(el.dataset.row);
+
+  boards[bIndex].cells[idx] = val;
+
+  if (val.length > 1) {
+    el.value = val.slice(0, -1) + "." + val.slice(-1);
+  } else {
+    el.value = val;
+  }
+
+  if (checkWarning(val)) { el.classList.add("cell-warning"); } 
+  else { el.classList.remove("cell-warning"); }
+
+  autoSave();
+  updateTotals();
+
+  let isBoardFull = boards[bIndex].cells.every(v => v !== "");
+
+  if (val.length === 3) {
+    let nextRow = row + 1;
+    let nextIdx = nextRow * 5 + col;
+
+    if (nextRow < 5) {
+      document.getElementById(`cell-${bIndex}-${nextIdx}`).focus();
+    } else {
+      let nextCol = col + 1;
+      if (nextCol < 5) {
+        document.getElementById(`cell-${bIndex}-${nextCol}`).focus();
+      } else {
+        if (isBoardFull) {
+          showToast("Đã nhập đủ 1 bảng cân!");
+          boards.push(createBoard());
+          autoSave();
+          render();
+          setTimeout(() => { document.getElementById(`cell-${boards.length-1}-0`).focus(); }, 50);
+        }
+      }
+    }
+  } else if (isBoardFull && idx === 24) {
+    showToast("Đã nhập đủ 1 bảng cân!");
+  }
+}
+
+function handleKey(e, el) {
+  if (e.key === "Backspace" && el.value === "") {
+    let row = parseInt(el.dataset.row);
+    let col = parseInt(el.dataset.col);
+    let bIndex = parseInt(el.dataset.board);
+    let prevRow = row - 1;
+    let prevIdx = prevRow * 5 + col;
+
+    if (prevRow >= 0) {
+      document.getElementById(`cell-${bIndex}-${prevIdx}`).focus();
+    } else if (col > 0) {
+      let prevIdx = 4 * 5 + (col - 1);
+      document.getElementById(`cell-${bIndex}-${prevIdx}`).focus();
+    }
+  }
+}
+
+function themBang() {
+  boards.push(createBoard());
+  autoSave(); render();
+  setTimeout(() => { document.getElementById(`cell-${boards.length-1}-0`).focus(); }, 50);
+}
+
+function deleteBoard(index) {
+  if (boards.length === 1) { alert("Phải có ít nhất 1 bảng!"); return; }
+  if (confirm("Xóa bảng này?")) {
+    boards.splice(index, 1);
+    autoSave(); render();
+  }
+}
+
+function xoaTatCa() {
+  if (confirm("Làm mới bảng? Dữ liệu hiện tại sẽ bị xóa sạch khỏi màn hình (Hãy chắc chắn bạn đã 'Lưu Phiếu' hoặc 'Chụp Ảnh').")) {
+    boards = [createBoard()];
+    chung.ten = ""; chung.donGia = ""; chung.tienCoc = ""; chung.trongLuongBi = ""; chung.trongLuongBiBao = "";
+    document.getElementById("tenChung").value = "";
+    document.getElementById("giaChung").value = "";
+    document.getElementById("tienCoc").value = "";
+    document.getElementById("trongLuongBi").value = "";
+    document.getElementById("trongLuongBiBao").value = "";
+    autoSave(); render();
+  }
+}
+
+// ---------------- LỊCH SỬ PHIẾU CÂN VỚI BẢO VỆ GHI ĐÈ ----------------
+function luuPhieuMoi() {
+  if (!chung.ten) { alert("Vui lòng nhập Tên Chủ Ruộng trước khi lưu phiếu!"); return; }
+  
+  let grandKg = 0;
+  boards.forEach(b => b.cells.forEach(c => { if(c!=="") grandKg += toKg(c) }));
+  
+  const ticket = {
+    id: Date.now(),
+    chung: JSON.parse(JSON.stringify(chung)),
+    boards: JSON.parse(JSON.stringify(boards)),
+    totalGross: grandKg
+  };
+  
+  // Kiểm tra trùng tên
+  let existingIndex = historyList.findIndex(t => t.chung.ten.trim().toLowerCase() === chung.ten.trim().toLowerCase());
+  
+  if (existingIndex !== -1) {
+    if (confirm(`Chủ ruộng "${chung.ten}" đã có trong Lịch sử!\n\n- Bấm [OK] để CẬP NHẬT (Ghi đè) phiếu cũ.\n- Bấm [Hủy] để giữ nguyên và vui lòng sửa thành tên khác (VD: ${chung.ten} 2).`)) {
+      historyList[existingIndex] = ticket; // Ghi đè
+      save();
+      showToast("Đã GHI ĐÈ phiếu vào Lịch Sử!");
+    } else {
+      return; // Người dùng bấm Hủy
+    }
+  } else {
+    historyList.unshift(ticket); // Thêm mới
+    save();
+    showToast("Đã lưu phiếu MỚI vào Lịch Sử!");
+  }
+}
+
+function moLichSu() {
+  const modal = document.getElementById("historyModal");
+  const listContainer = document.getElementById("historyList");
+  listContainer.innerHTML = "";
+
+  if(historyList.length === 0) {
+    listContainer.innerHTML = "<div style='text-align:center; padding: 20px; color: #666;'>Chưa có phiếu cân nào được lưu.</div>";
+  } else {
+    historyList.forEach((ticket, index) => {
+      listContainer.innerHTML += `
+        <div class="history-item">
+          <div class="history-info">
+            <div class="history-title">${ticket.chung.ten || 'Chưa đặt tên'}</div>
+            <div class="history-detail">${ticket.chung.ngay} | ${ticket.chung.loaiLua} | Tổng: ${formatKg(ticket.totalGross)} kg</div>
+          </div>
+          <div class="history-actions">
+            <button class="btn btn-primary" style="padding:6px 10px; font-size:12px;" onclick="moPhieuCu(${ticket.id})">Mở</button>
+            <button class="btn btn-danger" style="padding:6px 10px; font-size:12px;" onclick="xoaPhieuCu(${ticket.id})">Xóa</button>
+          </div>
+        </div>
+      `;
+    });
+  }
+  modal.classList.add("active");
+}
+
+function dongLichSu() {
+  document.getElementById("historyModal").classList.remove("active");
+}
+
+function moPhieuCu(id) {
+  if(!confirm("Mở phiếu này sẽ ghi đè lên màn hình hiện tại. Bạn có chắc chắn?")) return;
+  const ticket = historyList.find(t => t.id === id);
+  if(ticket) {
+    boards = JSON.parse(JSON.stringify(ticket.boards));
+    chung = JSON.parse(JSON.stringify(ticket.chung));
+    
+    document.getElementById("tenChung").value = chung.ten;
+    document.getElementById("ngayChung").value = chung.ngay;
+    document.getElementById("loaiChung").value = chung.loaiLua;
+    document.getElementById("giaChung").value = formatNumberStr(chung.donGia);
+    document.getElementById("trongLuongBi").value = chung.trongLuongBi || "";
+    document.getElementById("trongLuongBiBao").value = chung.trongLuongBiBao || "";
+    document.getElementById("tienCoc").value = formatNumberStr(chung.tienCoc);
+    
+    autoSave(); render();
+    dongLichSu();
+    showToast("Đã tải phiếu cân cũ ra màn hình!");
+  }
+}
+
+function xoaPhieuCu(id) {
+  if(confirm("Xóa phiếu cân này khỏi lịch sử vĩnh viễn?")) {
+    historyList = historyList.filter(t => t.id !== id);
+    save();
+    moLichSu();
+  }
+}
+
+// ---------------- XUẤT ẢNH (CHỤP PHIẾU) ----------------
+async function chupPhieu() {
+  const btnGroup = document.querySelector('.btn-group');
+  const boardBtns = document.querySelectorAll('.board-header button');
+  const captureArea = document.getElementById('capture-area');
+  
+  showToast("Đang tạo ảnh phiếu cân, vui lòng chờ...");
+
+  btnGroup.style.display = 'none';
+  boardBtns.forEach(btn => btn.style.display = 'none');
+  
+  await new Promise(r => setTimeout(r, 200));
+
+  try {
+    const canvas = await html2canvas(captureArea, {
+      backgroundColor: '#f3f4f6', scale: 2
+    });
+    const imgData = canvas.toDataURL('image/jpeg', 0.85);
+    const a = document.createElement('a');
+    a.href = imgData;
+    a.download = `PhieuCan_${chung.ten || 'Lua'}_${chung.ngay.replace(/\//g,'-')}.jpg`;
+    a.click();
+    showToast("Đã tải ảnh Phiếu Cân thành công!");
+  } catch (e) {
+    alert("Lỗi khi tạo ảnh: Cần kết nối internet để tải thư viện tạo ảnh lần đầu.");
+  } finally {
+    btnGroup.style.display = 'flex';
+    boardBtns.forEach(btn => btn.style.display = 'block');
+  }
+}
+
+// ---------------- IN HÓA ĐƠN & BACKUP ----------------
+function inPhieu() {
+  window.print();
+}
+
+function saoLuuFile() {
+  const data = { currentBoards: boards, currentChung: chung, history: historyList, backupDate: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = "backup_canlua_toanbo_" + new Date().toLocaleDateString('vi-VN').replace(/\//g, '-') + ".json";
+  a.click();
+}
+
+function khoiPhucFile() { document.getElementById("fileInput").click(); }
+
+function docFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (confirm("Khôi phục sẽ ghi đè toàn bộ lịch sử và dữ liệu hiện tại. Tiếp tục?")) {
+        boards = data.currentBoards || [createBoard()];
+        chung = data.currentChung || chung;
+        historyList = data.history || historyList;
+        
+        document.getElementById("tenChung").value = chung.ten;
+        document.getElementById("ngayChung").value = chung.ngay;
+        document.getElementById("loaiChung").value = chung.loaiLua;
+        document.getElementById("giaChung").value = formatNumberStr(chung.donGia);
+        document.getElementById("trongLuongBi").value = chung.trongLuongBi || "";
+        document.getElementById("trongLuongBiBao").value = chung.trongLuongBiBao || "";
+        document.getElementById("tienCoc").value = formatNumberStr(chung.tienCoc);
+        
+        save(); render(); dongLichSu();
+        alert("Khôi phục dữ liệu thành công!");
+      }
+    } catch(err) { alert("File không hợp lệ!"); }
+  };
+  reader.readAsText(file);
+}
+
+window.addEventListener('beforeunload', save);
+window.addEventListener('pagehide', save);
+window.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); });
+
+document.addEventListener("DOMContentLoaded", render);
+</script>
+
+</body>
+</html>
